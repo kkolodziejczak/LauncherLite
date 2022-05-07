@@ -1,86 +1,21 @@
-﻿using Serilog;
-using System.Diagnostics;
-using System.IO.Abstractions;
+﻿using System.Diagnostics;
 
 namespace LauncherLite
 {
-    public class Launcher
+    public partial class Launcher
     {
-        private string _tempDirectory = Path.GetTempPath();
-
-        private readonly string _launcherPath;
-        private readonly string _launcherName;
-        private readonly string _applicationPath;
-        private readonly string _applicationName;
-        private readonly IFileSystem _fileSystem;
-        private IVersionCheck? _checker;
-        private IVersionGetter? _getter;
-        private INewDownloader? _downloader;
-        private ILogger? _logger;
-
         private string _tempApplicationPath
             => Path.Combine(_tempDirectory, _applicationName);
 
         private string _tempLauncherPath
             => Path.Combine(_tempDirectory, _launcherName);
 
-        public Launcher(string launcherPath, string applicationPath)
-            : this(launcherPath, applicationPath, new FileSystem())
-        { }
-
-        public Launcher(string launcherPath, string applicationPath, IFileSystem fileSystem)
-        {
-            _fileSystem = fileSystem;
-            _launcherPath = ThrowIfFileDoesntExist(launcherPath);
-            _launcherName = Path.GetFileName(launcherPath);
-            _applicationPath = ThrowIfFileDoesntExist(applicationPath);
-            _applicationName = Path.GetFileName(applicationPath);
-        }
-
-        private string ThrowIfFileDoesntExist(string path)
-        {
-            if (!_fileSystem.File.Exists(path))
-            {
-                throw new FileNotFoundException("This file is neccessary for the launcher to work correctly.", path);
-            }
-
-            return path;
-        }
-
-        public Launcher UseTempDirectory(string path)
-        {
-            _tempDirectory = path ?? throw new ArgumentNullException(nameof(path));
-            return this;
-        }
-
-        public Launcher UseLogger(ILogger logger)
-        {
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            return this;
-        }
-
-        public Launcher UseVersionGetter(INewDownloader downloader)
-        {
-            _downloader = downloader ?? throw new ArgumentNullException(nameof(downloader));
-            return this;
-        }
-
-        public Launcher UseVersionGetter(IVersionGetter getter)
-        {
-            _getter = getter ?? throw new ArgumentNullException(nameof(getter));
-            return this;
-        }
-
-        public Launcher UseVersionChecker(IVersionCheck checker)
-        {
-            _checker = checker ?? throw new ArgumentNullException(nameof(checker));
-            return this;
-        }
         public Task<int> StartAsync()
-            => StartAsync(CancellationToken.None);
+                => StartAsync(CancellationToken.None);
 
         public async Task<int> StartAsync(CancellationToken cancellationToken)
         {
+            // TODO: check if necessary things were set to start process! classes are not null
             if (LauncherWasJustUpdated())
             {
                 UpdateLauncherFile();
@@ -199,24 +134,5 @@ namespace LauncherLite
 
         private int Ok()
                 => 0;
-    }
-
-    public interface IVersionCheck
-    {
-        Task<bool> IsLauncherTheNewestVersionAsync(Version current, CancellationToken cancellationToken);
-        Task<bool> IsApplicationTheNewestVersionAsync(Version current, CancellationToken cancellationToken);
-    }
-
-    public interface IVersionGetter
-    {
-        Task<Version> GetLauncherAsync(CancellationToken cancellationToken);
-        Task<Version> GetApplicationAsync(CancellationToken cancellationToken);
-    }
-
-    public interface INewDownloader
-    {
-        Task<bool> DownloadLauncherAsync(Stream destination, CancellationToken cancellationToken);
-        Task<bool> DownloadApplicationAsync(Stream destination, CancellationToken cancellationToken);
-        //TODO: how to know where it was saved/downloaded?? unpackted etc?
     }
 }
