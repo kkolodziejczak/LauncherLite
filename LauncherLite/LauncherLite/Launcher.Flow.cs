@@ -10,33 +10,53 @@ namespace LauncherLite
         private string _tempLauncherPath
             => Path.Combine(_tempDirectory, _launcherName);
 
+        /// <summary>
+        /// Starts the update flow. If there are any new versions available they will be downloaded.
+        /// </summary>
+        /// <returns>0 if there were no issues. Otherwise returns 1.</returns>
         public Task<int> StartAsync()
                 => StartAsync(CancellationToken.None);
 
+        /// <summary>
+        /// Starts the update flow. If there are any new versions available they will be downloaded.
+        /// </summary>
+        /// <param name="cancellationToken">Used to determine if process should stop.</param>
+        /// <returns>0 if there were no issues. Otherwise returns 1.</returns>
         public async Task<int> StartAsync(CancellationToken cancellationToken)
         {
-            // TODO: check if necessary things were set to start process! classes are not null
+            CheckRequirements();
             if (LauncherWasJustUpdated())
             {
-                UpdateLauncherFile();
+                DeleteTempLauncherFile();
             }
 
             return await IsLauncherTheNewestVersionAsync(cancellationToken)
                     ? await StartApplicationAsync(cancellationToken)
-                    : await DownloadNewLauncherVersionAsync(cancellationToken);
+                    : await DownloadNewLauncherAsync(cancellationToken);
+        }
+
+        private void CheckRequirements()
+        {
+            if (_downloader == null)
+            {
+                throw new NullReferenceException("You need to set 'downloader' in order to use launcher.");
+            }
+            if (_versionChecker == null)
+            {
+                throw new NullReferenceException("You need to set 'version checker' in order to use launcher.");
+            }
         }
 
         private bool LauncherWasJustUpdated()
-        {
-            return _fileSystem.File.Exists(_tempLauncherPath);
-        }
+            => _fileSystem.File.Exists(_tempLauncherPath);
 
-        private bool UpdateLauncherFile()
+        private bool DeleteTempLauncherFile()
         {
             if (Delete(_tempLauncherPath))
             {
                 return true;
             }
+            // Delete failed, we are currently the new version.
             if (!Delete(_launcherPath))
             {
                 _fileSystem.File.Move(_tempLauncherPath, _launcherPath);
@@ -47,24 +67,24 @@ namespace LauncherLite
 
         private async Task<bool> IsLauncherTheNewestVersionAsync(CancellationToken cancellationToken)
         {
-            var launcherVersion = await _getter.GetLauncherAsync(cancellationToken);
-            return await _checker.IsLauncherTheNewestVersionAsync(launcherVersion, cancellationToken);
+            var launcherVersion = await _versionGetter.GetLauncherAsync(cancellationToken);
+            return await _versionChecker.IsLauncherTheNewestVersionAsync(launcherVersion, cancellationToken);
         }
 
         private async Task<int> StartApplicationAsync(CancellationToken cancellationToken)
             => await IsApplicationTheNewestVersionAsync(cancellationToken)
-                ? LaunchApplication()
+                ? StartApplication()
                 : await DownloadNewApplicationVersionAsync(cancellationToken);
 
-        private async Task<int> DownloadNewLauncherVersionAsync(CancellationToken cancellationToken)
+        private async Task<int> DownloadNewLauncherAsync(CancellationToken cancellationToken)
             => await WasNewLauncherDownloadedAsync(cancellationToken)
-                ? LaunchNewLauncher()
-                : ReportError("Error occured during downloading of the new launcher.");
+                ? StartNewLauncher()
+                : ReportError("Error occurred during downloading of the new launcher.");
 
         private async Task<bool> IsApplicationTheNewestVersionAsync(CancellationToken cancellationToken)
         {
-            var applicationVersion = await _getter.GetApplicationAsync(cancellationToken);
-            return await _checker.IsApplicationTheNewestVersionAsync(applicationVersion, cancellationToken);
+            var applicationVersion = await _versionGetter.GetApplicationAsync(cancellationToken);
+            return await _versionChecker.IsApplicationTheNewestVersionAsync(applicationVersion, cancellationToken);
         }
 
         private async Task<bool> WasNewLauncherDownloadedAsync(CancellationToken cancellationToken)
@@ -72,33 +92,28 @@ namespace LauncherLite
             using var newLauncherStream = _fileSystem.File.Create(_tempLauncherPath);
             await _downloader.DownloadLauncherAsync(newLauncherStream, cancellationToken);
             return _fileSystem.File.Exists(_tempLauncherPath)
-                && IsNotEmpty(_tempLauncherPath);
+                && IsFileIsNotEmpty(_tempLauncherPath);
         }
 
         private async Task<int> DownloadNewApplicationVersionAsync(CancellationToken cancellationToken)
             => await WasNewApplicationDownloadedAsync(cancellationToken)
-                ? ReplaceOldApplication()
-                    ? LaunchApplication()
-                    : ReportError("Error occured during replacing old application with new one.")
-                : ReportError("Error occured during downloading of the new application.");
+                ? WasOldApplicationReplaced()
+                    ? StartApplication()
+                    : ReportError("Error occurred during replacing old application with new one.")
+                : ReportError("Error occurred during downloading of the new application.");
 
         private async Task<bool> WasNewApplicationDownloadedAsync(CancellationToken cancellationToken)
         {
             using var newApplicationStream = _fileSystem.File.Create(_tempApplicationPath);
             await _downloader.DownloadApplicationAsync(newApplicationStream, cancellationToken);
             return _fileSystem.File.Exists(_tempApplicationPath)
-                && IsNotEmpty(_tempApplicationPath);
+                && IsFileIsNotEmpty(_tempApplicationPath);
         }
 
-        private bool ReplaceOldApplication()
-        {
-            if (Delete(_applicationPath))
-            {
-                return Copy(_tempApplicationPath, _applicationPath);
-            }
-
-            return false;
-        }
+        private bool WasOldApplicationReplaced()
+            => Delete(_applicationPath)
+                ? Copy(_tempApplicationPath, _applicationPath)
+                : false;
 
         private bool Delete(string path)
         {
@@ -113,16 +128,17 @@ namespace LauncherLite
                && !_fileSystem.File.Exists(source);
         }
 
-        private bool IsNotEmpty(string path)
-            => _fileSystem.FileInfo.FromFileName(path).Length > 0;
+        private bool IsFileIsNotEmpty(string path)
+            => _fileSystem.File.Exists(path)
+            && _fileSystem.FileInfo.FromFileName(path).Length > 0;
 
-        private int LaunchNewLauncher()
-            => Process.Start(_tempLauncherPath) != null
+        private int StartNewLauncher()
+            => Process.Start(_tempLauncherPath, new List<string>(Args) { _launcherPathParameter, _launcherPath }) != null
                 ? Ok()
                 : ReportError("Error while trying to start new launcher.");
 
-        private int LaunchApplication()
-            => Process.Start(_applicationPath) != null
+        private int StartApplication()
+            => Process.Start(_applicationPath, Args) != null
                 ? Ok()
                 : ReportError("Error while trying to start application.");
 

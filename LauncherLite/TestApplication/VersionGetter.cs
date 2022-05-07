@@ -1,6 +1,6 @@
 ﻿using LauncherLite;
 
-internal class VersionGetter : IVersionGetter
+internal class VersionGetter : ICurrentVersionGetter
 {
     public Task<Version> GetApplicationAsync(CancellationToken cancellationToken)
     {

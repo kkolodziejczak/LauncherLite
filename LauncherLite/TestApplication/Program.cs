@@ -1,10 +1,19 @@
 ﻿using LauncherLite;
-using System.IO.Abstractions;
 
 static Task<int> Main(string[] args)
 {
-    return new Launcher("./", "./")
-        .UseVersionGetter(new VersionGetter())
+    var launcherPath = Path.Combine(Directory.GetCurrentDirectory(), args[0]);
+    var applicationPath = Path.Combine(launcherPath, "Application");
+
+    var launcher = LauncherConfigurator
+        .UseArgs(args)
+        .UseApplicationDirectory(applicationPath)
+        .UseDownloader(new Downloader())
         .UseVersionChecker(new VersionChecker())
-        .StartAsync();
+        .Create();
+
+    //TODO: Add status, so that You could display what currently is going on.
+    //TODO: check if application path is relative path then combine so it is correct.
+
+    return launcher.StartAsync();
 }
