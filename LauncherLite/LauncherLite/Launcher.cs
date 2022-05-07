@@ -8,16 +8,19 @@ namespace LauncherLite
         private const string _launcherPathParameter = "-launcher-path-before-update";
 
         private readonly string _launcherPath;
-        private readonly string _launcherName;
         private readonly string _applicationPath;
-        private readonly string _applicationName;
         private readonly IFileSystem _fileSystem;
+
+        private string _tempApplicationPath;
+        private DefaultFileVersionInfo _fileVersion;
+        private string _tempLauncherPath;
 
         private string _tempDirectory;
         private IVersionCheck? _versionChecker;
         private ICurrentVersionGetter _versionGetter;
         private INewDownloader? _downloader;
         private ILogger? _logger;
+        private IProcessService _processService;
 
         /// <summary>
         /// Arguments used during launcher start.
@@ -45,12 +48,17 @@ namespace LauncherLite
             {
                 _launcherPath = ThrowIfFileDoesntExist(launcherPath);
             }
-            _launcherName = _fileSystem.Path.GetFileName(_launcherPath);
+            var launcherName = _fileSystem.Path.GetFileName(_launcherPath);
+            _tempLauncherPath = _fileSystem.Path.Combine(_tempDirectory, launcherName);
 
             _applicationPath = applicationPath;
-            _applicationName = _fileSystem.Path.GetFileName(_applicationPath);
+            var applicationName = _fileSystem.Path.GetFileName(_applicationPath);
+            _tempApplicationPath = _fileSystem.Path.Combine(_tempDirectory, applicationName);
 
-            _versionGetter = new DefaultVersionGetter(_launcherPath, _applicationPath);
+            _fileVersion = new DefaultFileVersionInfo();
+            // TODO: add posibility to override FileVersion.!
+            _versionGetter = new DefaultVersionGetter(_launcherPath, _applicationPath, _fileVersion);
+            _processService = new DefaultProcessService();
         }
 
         /// <summary>
@@ -89,6 +97,12 @@ namespace LauncherLite
             return this;
         }
 
+        internal Launcher UseProcessService(IProcessService processService)
+        {
+            _processService = processService ?? throw new ArgumentNullException(nameof(processService));
+            return this;
+        }
+
         private string ThrowIfFileDoesntExist(string path)
         {
             if (!_fileSystem.File.Exists(path))
@@ -99,14 +113,27 @@ namespace LauncherLite
             return path;
         }
 
-        private static string? TryGetOldLauncherPath(string[] args)
+        private string? TryGetOldLauncherPath(string[] args)
         {
             var launcherPathParamIndex = Array.IndexOf(args, _launcherPathParameter);
             if (launcherPathParamIndex == -1)
             {
                 return null;
             }
-            return args[launcherPathParamIndex + 1];
+
+            var path = string.Empty;
+            if (args.Length > launcherPathParamIndex)
+            {
+                path = args[launcherPathParamIndex + 1];
+            }
+
+            if (_fileSystem.File.Exists(path))
+            {
+                //TODO: handle wrong parameters.
+            }
+
+            _logger?.Warning("There was last launcher path but there was no value provided");
+            return null;
         }
 
     }

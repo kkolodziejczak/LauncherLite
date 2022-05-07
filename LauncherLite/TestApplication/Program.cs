@@ -14,6 +14,7 @@ static Task<int> Main(string[] args)
 
     //TODO: Add status, so that You could display what currently is going on.
     //TODO: check if application path is relative path then combine so it is correct.
+    //TODO: Switch process launcher to interface for easier testing.
 
     return launcher.StartAsync();
 }

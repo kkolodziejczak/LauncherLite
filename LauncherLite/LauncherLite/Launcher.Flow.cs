@@ -1,15 +1,7 @@
-﻿using System.Diagnostics;
-
-namespace LauncherLite
+﻿namespace LauncherLite
 {
     public partial class Launcher
     {
-        private string _tempApplicationPath
-            => Path.Combine(_tempDirectory, _applicationName);
-
-        private string _tempLauncherPath
-            => Path.Combine(_tempDirectory, _launcherName);
-
         /// <summary>
         /// Starts the update flow. If there are any new versions available they will be downloaded.
         /// </summary>
@@ -133,14 +125,14 @@ namespace LauncherLite
             && _fileSystem.FileInfo.FromFileName(path).Length > 0;
 
         private int StartNewLauncher()
-            => Process.Start(_tempLauncherPath, new List<string>(Args) { _launcherPathParameter, _launcherPath }) != null
-                ? Ok()
-                : ReportError("Error while trying to start new launcher.");
+            => _processService.Start(_tempLauncherPath, new List<string>(Args) { _launcherPathParameter, _launcherPath }) == null
+                ? ReportError("Error while trying to start new launcher.")
+                : Ok();
 
         private int StartApplication()
-            => Process.Start(_applicationPath, Args) != null
-                ? Ok()
-                : ReportError("Error while trying to start application.");
+            => _processService.Start(_applicationPath, Args) == null
+                ? ReportError("Error while trying to start application.")
+                : Ok();
 
         private int ReportError(string message)
         {

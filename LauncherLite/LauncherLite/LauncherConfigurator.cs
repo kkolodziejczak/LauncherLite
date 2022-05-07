@@ -1,5 +1,4 @@
 ﻿using Serilog;
-using System.Diagnostics;
 using System.IO.Abstractions;
 using static LauncherLite.LauncherConfigurator;
 
@@ -8,25 +7,26 @@ namespace LauncherLite
     /// <summary>
     /// Used to create configured <see cref="Launcher"/>.
     /// </summary>
-    public class LauncherConfigurator : IDownloadConfiguration,
+    public class LauncherConfigurator : IApplicationPathsConfiguration,
             IVersionCheckConfiguration,
-            IOptionalConfiguration,
-            IApplicationPathsConfiguration
+            IDownloadConfiguration,
+            IOptionalConfiguration
     {
-        private readonly Launcher _launcher;
         private readonly string[] _args;
         private string _launcherPath;
         private string _applicationPath;
-        private static IFileSystem _fileSystem;
+        private IFileSystem _fileSystem;
+        private IProcessService _processService;
+        private INewDownloader _downloader;
+        private IVersionCheck _checker;
+        private ILogger? _logger;
+        private ICurrentVersionGetter? _versionGetter;
 
         internal LauncherConfigurator(string[] args)
         {
             _args = args;
             _fileSystem = new FileSystem();
-            _launcherPath =
-                _fileSystem.Path.Combine(
-                    _fileSystem.Directory.GetCurrentDirectory(),
-                    Process.GetCurrentProcess().StartInfo.FileName);
+            _processService = new DefaultProcessService();
         }
 
         /// <summary>
@@ -68,7 +68,7 @@ namespace LauncherLite
         /// <inheritdoc/>
         public IVersionCheckConfiguration UseDownloader(INewDownloader downloader)
         {
-            _launcher.UseDownloader(downloader);
+            _downloader = downloader;
             return this;
         }
 
@@ -86,7 +86,7 @@ namespace LauncherLite
         /// <inheritdoc/>
         public IOptionalConfiguration UseVersionChecker(IVersionCheck checker)
         {
-            _launcher.UseVersionChecker(checker);
+            _checker = checker;
             return this;
         }
 
@@ -116,6 +116,14 @@ namespace LauncherLite
             IOptionalConfiguration UseVersionGetter(ICurrentVersionGetter versionGetter);
 
             /// <summary>
+            /// Overrides default process service.
+            /// </summary>
+            /// <param name="processService">Process service used to start new processes.</param>
+            /// <returns></returns>
+            /// <exception cref="ArgumentNullException">Thrown when <paramref name="processService"/> is null.</exception>
+            IOptionalConfiguration UseProcessService(IProcessService processService);
+
+            /// <summary>
             /// Overrides launcher path to use.
             /// </summary>
             /// <param name="path"></param>
@@ -132,13 +140,36 @@ namespace LauncherLite
         /// <inheritdoc/>
         public Launcher Create()
         {
-            return new Launcher(_args, _launcherPath, _applicationPath, _fileSystem);
+            if (string.IsNullOrEmpty(_launcherPath))
+            {
+                //TODO: If path is relative?
+                _launcherPath =
+                    _fileSystem.Path.Combine(
+                        _fileSystem.Directory.GetCurrentDirectory(),
+                        _processService.GetCurrentProcess().StartInfo.FileName);
+            }
+            var launcher = new Launcher(_args, _launcherPath, _applicationPath, _fileSystem);
+            launcher.UseProcessService(_processService);
+            launcher.UseDownloader(_downloader);
+            launcher.UseVersionChecker(_checker);
+
+            if (_logger != null)
+            {
+                launcher.UseLogger(_logger);
+            }
+
+            if (_versionGetter != null)
+            {
+                launcher.UseVersionGetter(_versionGetter);
+            }
+
+            return launcher;
         }
 
         /// <inheritdoc/>
         public IOptionalConfiguration UseLogger(ILogger logger)
         {
-            _launcher.UseLogger(logger);
+            _logger = logger;
             return this;
         }
 
@@ -159,7 +190,14 @@ namespace LauncherLite
         /// <inheritdoc/>
         public IOptionalConfiguration UseVersionGetter(ICurrentVersionGetter versionGetter)
         {
-            _launcher.UseVersionGetter(versionGetter);
+            _versionGetter = versionGetter;
+            return this;
+        }
+
+        /// <inheritdoc/>
+        public IOptionalConfiguration UseProcessService(IProcessService processService)
+        {
+            _processService = processService;
             return this;
         }
     }
